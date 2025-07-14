@@ -11,6 +11,7 @@ Colly.py is a Python script that processes specified files and directories, appl
 - **Python Minification**: Minify Python files by removing comments and excess whitespace.
 - **Dynamic Word Truncation**: Truncate words to a minimal length that preserves uniqueness across all files, with optional pattern-based overrides (e.g., `*.py:50`).
 - **Clipboard Output**: Copy the Markdown output to the clipboard, splitting large outputs into manageable chunks with instructional comments.
+- **Verbose Output & Stats**: Optionally include detailed run information, truncation details, and per-file/total stats in the output.
 
 ## Usage
 
@@ -63,7 +64,7 @@ Run the script from the command line using Python 3.x. The script accepts variou
   ```
 
 - **`-m`, `--minify-python`**  
-  Minify Python files by removing comments and excess whitespace.  
+  Minify Python files by removing comments and excess whitespace. 
   *Example*:  
   ```bash
   python colly.py -m
@@ -97,6 +98,15 @@ Run the script from the command line using Python 3.x. The script accepts variou
   ```bash
   python colly.py -v
   ```
+
+- **`-n`, `--no-clip`**  
+  Print output to stdout instead of copying to clipboard.
+
+- **`-q`, `--show-min-truncation-length`**  
+  Only output the minimal truncation length and exit.
+
+- **`-b`, `--show-stats`**  
+  Output basic stats (number of files, lines per file, character count per file, total lines, total character count).
 
 ### Examples
 
@@ -141,4 +151,5 @@ The script uses platform-specific tools to copy to the clipboard:
 - **File Access Errors**: Files that cannot be read (due to permissions or encoding issues) are skipped with an error logged.
 - **Truncation Limitations**: If no minimal truncation length preserves word uniqueness within `--max-length`, global truncation is skipped, though pattern-specific overrides still apply.
 - **Pattern Matching**: Exclusions and overrides use shell-style wildcards (via `fnmatch`), not full regex.
+- **Truncation Limitations**: If no minimal truncation length preserves word uniqueness within `--max-length`, global truncation is skipped, though pattern-specific overrides still apply.
 - **Unsupported Platforms**: Clipboard copying is not supported on platforms other than Windows, macOS, and Linux with `xclip`.
