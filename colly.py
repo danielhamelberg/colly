@@ -8,6 +8,7 @@ import fnmatch
 import logging
 import subprocess
 from typing import List, Optional, Set, Tuple
+import json
 
 try:
     import chardet
@@ -58,7 +59,19 @@ default_exclusions = [
 
 def compile_exclusion_patterns(exclusions: List[str]) -> List[re.Pattern]:
     """Compile exclusion patterns into regex objects using fnmatch.translate."""
-    return [re.compile(fnmatch.translate(pattern)) for pattern in exclusions]
+    # Normalize exclusions: strip leading './', '.\\' and convert to pattern matching anywhere in the path
+    normalized = []
+    for pattern in exclusions:
+        # Remove leading './' or '.\\' or './'
+        pattern = re.sub(r'^(\.\\|\./|\.)', '', pattern)
+        # If it's a directory name, match anywhere in the path
+        if not any(c in pattern for c in '*?[]'):  # plain name, not a glob
+            normalized.append(f'*{os.sep}{pattern}*')
+            normalized.append(f'*{pattern}{os.sep}*')
+            normalized.append(pattern)  # also match basename
+        else:
+            normalized.append(pattern)
+    return [re.compile(fnmatch.translate(p)) for p in normalized]
 
 def is_excluded(path: str, exclusion_patterns: List[re.Pattern]) -> bool:
     """Check if the path matches any exclusion pattern (search anywhere in the path)."""
@@ -75,7 +88,7 @@ def detect_encoding(file_path: str, default_encoding: str) -> str:
         with open(file_path, 'rb') as f:
             raw_data = f.read(8192)
         result = chardet.detect(raw_data)
-        return result['encoding'] if result['encoding'] else default_encoding
+        return result['encoding'] if result and result.get('encoding') else default_encoding
     except Exception:
         return default_encoding
 
@@ -175,7 +188,35 @@ def copy_to_clipboard(text: str, max_clip_length: int) -> None:
         logging.warning(f"Clipboard copying not supported on {sys.platform}")
         return
 
-    chunks = [text[i:i + max_clip_length] for i in range(0, len(text), max_clip_length)]
+    # Split text into file blocks, ensuring no file is split between chunks
+    file_blocks = []
+    current_block = []
+    current_length = 0
+    # Split by markdown file header (## )
+    lines = text.splitlines(keepends=True)
+    for line in lines:
+        if line.startswith('## '):
+            # If current_block is not empty, start a new block
+            if current_block:
+                file_blocks.append(''.join(current_block))
+                current_block = []
+                current_length = 0
+        current_block.append(line)
+        current_length += len(line)
+    if current_block:
+        file_blocks.append(''.join(current_block))
+
+    # Now group file_blocks into chunks, each chunk <= max_clip_length, but never splitting a file
+    chunks = []
+    chunk = ''
+    for block in file_blocks:
+        if len(chunk) + len(block) > max_clip_length and chunk:
+            chunks.append(chunk)
+            chunk = block
+        else:
+            chunk += block
+    if chunk:
+        chunks.append(chunk)
     num_chunks = len(chunks)
 
     for idx, chunk in enumerate(chunks, 1):
@@ -187,7 +228,7 @@ def copy_to_clipboard(text: str, max_clip_length: int) -> None:
         try:
             subprocess.run(cmd, shell=(sys.platform == 'linux'), input=chunk_with_comment.encode('utf-8'), check=True)
             if idx < num_chunks:
-                time.sleep(0.5)
+                time.sleep(2.5)  # Increased delay for clipboard history
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to copy chunk {idx} to clipboard: {e}")
             break
@@ -264,10 +305,41 @@ def build_verbose_output(truncate: bool, unique_words: Set[str], max_length: int
 
     return output
 
+class Stats:
+    def __init__(self):
+        self.per_file = {}
+        self.total_lines = 0
+        self.total_chars = 0
+        self.num_files_processed = 0
+
+    def add_file(self, file_path, lines, chars):
+        self.per_file[file_path] = {'lines': lines, 'chars': chars}
+        self.total_lines += lines
+        self.total_chars += chars
+        self.num_files_processed += 1
+
+    def render(self, as_json=True):
+        stats_dict = {
+            "num_files_processed": self.num_files_processed,
+            "total_lines": self.total_lines,
+            "total_chars": self.total_chars,
+            "files": [
+                {
+                    "file": os.path.relpath(file),
+                    "lines": stat['lines'],
+                    "chars": stat['chars']
+                }
+                for file, stat in self.per_file.items()
+            ]
+        }
+        return json.dumps(stats_dict, indent=2, ensure_ascii=False)
+
 def process_files(files: List[str], exclusion_patterns: List[re.Pattern], follow_symlinks: bool,
-                  default_encoding: str, minify_python: bool, truncate: bool, max_length: int,
-                  overrides: List[Tuple[str, int]], unique_words: Set[str], verbose: bool) -> str:
+                 default_encoding: str, minify_python: bool, truncate: bool, max_length: int,
+                 overrides: List[Tuple[str, int]], unique_words: Set[str], verbose: bool, show_stats: bool) -> tuple[str, Stats]:
     output = []
+    stats = Stats()
+
     if verbose:
         output.extend(build_verbose_output(truncate, unique_words, max_length,
                                            overrides, follow_symlinks,
@@ -285,40 +357,43 @@ def process_files(files: List[str], exclusion_patterns: List[re.Pattern], follow
     else:
         truncation_length = None
 
-    # Process the files and append their content
-    num_files_processed = 0
     for file_path in files:
         full_path = os.path.abspath(file_path)
         if not os.path.exists(full_path) or is_excluded(full_path, exclusion_patterns):
             continue
         if os.path.isfile(full_path):
-            result = process_single_file(full_path, default_encoding, minify_python, truncate, truncation_length, overrides)
+            result, stat = process_single_file(full_path, default_encoding, minify_python, truncate, truncation_length, overrides)
             if result:
                 output.extend(result)
-                num_files_processed += 1
+                if stat:
+                    stats.add_file(file_path, stat['lines'], stat['chars'])
         elif os.path.isdir(full_path):
             for root, dirs, files_in_dir in os.walk(full_path, followlinks=follow_symlinks):
                 dirs[:] = [d for d in dirs if not is_excluded(os.path.join(root, d), exclusion_patterns)]
                 for file_name in files_in_dir:
                     file_full_path = os.path.join(root, file_name)
                     if not is_excluded(file_full_path, exclusion_patterns):
-                        result = process_single_file(file_full_path, default_encoding, minify_python, truncate, truncation_length, overrides)
+                        result, stat = process_single_file(file_full_path, default_encoding, minify_python, truncate, truncation_length, overrides)
                         if result:
                             output.extend(result)
-                            num_files_processed += 1
+                            if stat:
+                                stats.add_file(file_full_path, stat['lines'], stat['chars'])
+
+    # Stats output
+    if show_stats:
+        output.append(stats.render())
 
     # Summary
     if verbose:
         output.append("# Summary")
-        output.append(f"- Number of files processed: {num_files_processed}")
+        output.append(f"- Number of files processed: {stats.num_files_processed}")
         output.append("")
 
-    return '\n'.join(output)
+    return '\n'.join(output), stats
 
 def process_single_file(file_path: str, default_encoding: str, minify_python: bool,
-                        truncate: bool, truncation_length: Optional[int],
-                        overrides: List[Tuple[str, int]]) -> List[str]:
-    """Process a single file with optional minification and truncation."""
+                       truncate: bool, truncation_length: Optional[int],
+                       overrides: List[Tuple[str, int]]):
     output = []
     extension = os.path.splitext(file_path)[1].lower()
     language = language_identifier.get(extension, "plaintext")
@@ -328,19 +403,29 @@ def process_single_file(file_path: str, default_encoding: str, minify_python: bo
             content = f.read()
     except Exception as e:
         logging.error(f"Failed to read {file_path}: {e}")
-        return []
+        return [], None
 
     if not content.strip():
-        return []
+        return [], None
+
+    # Stats before post-processing
+    stats = {
+        'lines': len(content.splitlines()),
+        'chars': len(content),
+    }
 
     if minify_python and extension == '.py':
         content = minify_python_code(content)
+        stats['lines'] = len(content.splitlines())
+        stats['chars'] = len(content)
 
     if truncate:
         override_max_length = match_override(file_path, overrides)
         trunc_length = override_max_length if override_max_length is not None else truncation_length
         if trunc_length is not None:
             content = truncate_content(content, trunc_length)
+            stats['lines'] = len(content.splitlines())
+            stats['chars'] = len(content)
 
     try:
         relative_path = os.path.relpath(file_path)
@@ -352,7 +437,7 @@ def process_single_file(file_path: str, default_encoding: str, minify_python: bo
     output.append(content.rstrip())
     output.append("```")
     output.append("")
-    return output
+    return output, stats
 
 def main():
     parser = argparse.ArgumentParser(
@@ -384,7 +469,10 @@ Examples of usage:
     parser.add_argument('-t','--truncate', action='store_true', help="Enable dynamic truncation")
     parser.add_argument('-l','--max-length', type=int, default=80, help="Max word length for truncation")
     parser.add_argument('-o','--override-max-length', action='append', default=[], help="Pattern:length overrides (e.g., '*.py:50')")
+    parser.add_argument('-n', '--no-clip', action='store_true', help="Do not copy output to clipboard")
     parser.add_argument('-v','--verbose', action='store_true', help="Show verbose output (info-level logs).")
+    parser.add_argument('-q','--show-min-truncation-length', action='store_true', help="Only output the minimal truncation length and exit.")
+    parser.add_argument('-b','--show-stats', action='store_true', help="Always output basic stats (number of files, lines per file, character count per file, total lines, total character count)")
 
     args = parser.parse_args()
     if args.debug:
@@ -408,21 +496,54 @@ Examples of usage:
     exclusion_patterns = compile_exclusion_patterns(combined_exclusions)
     overrides = parse_override_max_length(args.override_max_length)
 
-    unique_words = collect_unique_words(patterns, exclusion_patterns, args.encoding) if args.truncate else set()
+    unique_words = collect_unique_words(patterns, exclusion_patterns, args.encoding) if (args.truncate or args.show_min_truncation_length) else set()
 
-    result = process_files(
-        patterns, exclusion_patterns, args.follow_symlinks, args.encoding,
-        args.minify_python, args.truncate, args.max_length, overrides,
-        unique_words, args.verbose
+    if args.show_min_truncation_length:
+        min_trunc_length = find_min_truncation_length(unique_words, args.max_length)
+        if min_trunc_length is not None:
+            print(f"Minimal truncation length: {min_trunc_length}")
+        else:
+            print("No suitable minimal truncation length found within the allowed range.")
+        sys.exit(0)
+
+    # Pass show_stats directly to process_files
+    result, stats = process_files(
+        patterns,
+        exclusion_patterns,
+        args.follow_symlinks,
+        args.encoding,
+        args.minify_python,
+        args.truncate,
+        args.max_length,
+        overrides,
+        unique_words,
+        args.verbose,
+        args.show_stats
     )
 
     if result.strip():
-        # Pass in the user-supplied max_clip_length to the function
-        copy_to_clipboard(result, args.max_clip_length)
+        try:
+            if args.no_clip:
+                print(result)
+                sys.stdout.flush()
+            else:
+                # Pass in the user-supplied max_clip_length to the function
+                copy_to_clipboard(result, args.max_clip_length)
+        except BrokenPipeError:
+            try:
+                sys.stdout.close()
+            except Exception:
+                pass
+            sys.exit(0)
     else:
-        logging.info("No content generated after processing")
+        # Always print a message if no files are processed or output is empty
+        print("# No content generated after processing.\n- No files were processed or all files were excluded/empty.")
 
     logging.info(f"Completed in {time.time() - start_time:.2f} seconds")
+
+    # Output stats to the console log at the very end
+    if args.show_stats:
+        logging.info("\n# Stats Summary \n```json" + stats.render() + "\n```")
 
 if __name__ == "__main__":
     main()
