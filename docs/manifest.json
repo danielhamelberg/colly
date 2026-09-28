@@ -1,0 +1,14 @@
+{
+  "pages": [
+    "README.md",
+    "docs/index.md",
+    "docs/quickstart.md",
+    "docs/contributing.md",
+    "docs/agent-tool-contract.md",
+    "docs/bra-context-expansion.md",
+    "docs/ai-native-dependency-graph-annotations.md",
+    "docs/reference/agent-request.md",
+    ".agents/tools/colly-tool.md",
+    ".agents/skills/use-colly/SKILL.md"
+  ]
+}

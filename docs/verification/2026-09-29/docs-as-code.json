@@ -1,0 +1,55 @@
+{
+  "iteration_id": "docs-as-code-20260929",
+  "parent_system_version": "bf3491c",
+  "candidate_id": "colly-docs-as-code-v1",
+  "hypothesis": "Documentation can be kept reviewable and mechanically checked alongside implementation.",
+  "exact_modification": [
+    "README.md",
+    ".github/workflows/verify.yml",
+    "scripts/check_docs.py",
+    "docs/manifest.json",
+    "docs/index.md",
+    "docs/quickstart.md",
+    "docs/contributing.md",
+    "docs/reference/agent-request.md",
+    "docs/examples/collect_context.py"
+  ],
+  "intended_mechanism": "Versioned maintained-page manifest, schema-derived reference, checked local links, executable example and CI gate.",
+  "benchmarks_run": [
+    "python scripts/check_docs.py",
+    "python -m unittest discover",
+    "negative probes for missing links, external local paths, fenced examples and schema drift",
+    "git diff --cached --check"
+  ],
+  "main_results": {
+    "maintained_pages": 10,
+    "schema_reference": "matches canonical schema",
+    "executable_example": "passed"
+  },
+  "regression_results": {
+    "tests_run": 120,
+    "passed": 119,
+    "skipped": 1,
+    "skip_reason": "Windows symlink privileges unavailable"
+  },
+  "adversarial_results": "Negative probes passed: missing/escaping links rejected; fenced examples ignored; modified schema changes generated output.",
+  "cost_results": "Local standard-library checks; no network or model calls.",
+  "safety_results": "Example writes to a temporary workspace and verifies source preservation and both returned artifact hashes.",
+  "decision": "accept",
+  "decision_rationale": "Documentation gates and full existing suite pass. No comparative capability or live-provider claim.",
+  "reproducibility_notes": "Run the documented checker and unittest commands with Python 3.12. CI is configured but has not run remotely.",
+  "rollback_trigger": "Revert this documentation-workflow commit if the checker, example or existing tests regress.",
+  "artifact_hashes": {
+    "README.md": "8595d6b7aa62a0fad8ef2b37508eee48e054575700d4c82c733850ea3f7cb498",
+    ".github/workflows/verify.yml": "dc75e36bca6ee1b5d66dc8b7b3b2660b50978eb1bce61aa42183b2f77e1af5e5",
+    "scripts/check_docs.py": "26142a0557df25c39c21e4074bdeb02cad66af768e7c6d53df6038cc7918c859",
+    "docs/manifest.json": "6a3f5db1f36e70f60dc9138ab51f907e56a05ea78b6a9c2dab4031eddb3d5e1d",
+    "docs/index.md": "79a85e13a05e6f075b0f5fec176acc09f937148ef7228db5255507e829910ec2",
+    "docs/quickstart.md": "0e0dc85e75cb592287cccc731cc9966dff783aa9fb160aa344bb54f6d9bebbb7",
+    "docs/contributing.md": "a3ab4de836adf64ff4f55997dc6ac5999fe79a259c27b409dbb184b1e9789af6",
+    "docs/reference/agent-request.md": "01376b3e6551526aafabf1f3466aa34505738d250591a07e1010f61a85e4d522",
+    "docs/examples/collect_context.py": "e83f64c424046955c833ee584b64970748c29ed095c95e31e8fce98aed33f637"
+  },
+  "operator_notes": "Link checks cover repository-local inline Markdown targets outside fences; external URLs and fragments are not validated. Historical plans and dated evidence are not maintained-page targets.",
+  "evidence_class": "C"
+}

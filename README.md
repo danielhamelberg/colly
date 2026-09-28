@@ -8,6 +8,8 @@ Python 3.10 or newer. The core CLI and test suite use the standard library. Inst
 
 ## Usage
 
+See the [documentation index](docs/index.md) and [executable quickstart](docs/quickstart.md).
+
 ```powershell
 python colly.py -n --no-dependency-graph -f src
 python colly.py --agent --request-json request.json
@@ -21,6 +23,7 @@ From the repository root:
 
 ```powershell
 python -m unittest discover -v
+python scripts/check_docs.py
 python -m harness.agent_tool_eval --provider offline-contract --ledger artifacts/verification/ledger.jsonl
 python -m harness.agent_tool_adjudicate --ledger artifacts/verification/ledger.jsonl --acceptance artifacts/verification/acceptance.json --verify-repository
 ```
