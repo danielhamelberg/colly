@@ -1,0 +1,67 @@
+{
+  "iteration_id": "branch-readiness-20260929",
+  "parent_system_version": "0027e908776d7c4af810f86b26a2ebe7f351c511",
+  "candidate_id": "colly-agent-tool-contract-v1-readiness",
+  "hypothesis": "Bounded scan and rollback repairs preserve the local contract while closing reproduced failures.",
+  "exact_modification": [
+    "Bound directory/glob enumeration and prune excluded/link paths",
+    "Accept overlapping selectors",
+    "Reject linked ignore/output paths and non-file artifact targets",
+    "Preserve recovery backups on rollback failure",
+    "Pin evaluator bytes and denominator, independently validate case identity and results",
+    "Bind ledgers to execution-time source/evaluator/test hashes; persist rejected trials",
+    "Refuse redirected model requests and repeat tool calls; quarantine live compatibility",
+    "Add checkout normalization, README and Windows CI"
+  ],
+  "intended_mechanism": "Enforce existing boundaries before traversal or mutation and prevent invalid or stale evidence from passing adjudication.",
+  "benchmarks_run": [
+    "unittest discover",
+    "agent-tool-cases-v1 repeated twice",
+    "py_compile",
+    "git diff --check",
+    "git diff --cached --check",
+    "independent code review"
+  ],
+  "main_results": {
+    "frozen_cases": 24,
+    "passed_each_run": [
+      24,
+      24
+    ],
+    "comparative_capability_gain": "not established"
+  },
+  "regression_results": {
+    "tests_run": 120,
+    "passed": 119,
+    "skipped": 1,
+    "skip_reason": "Windows symlink privilege unavailable",
+    "pre_repair_existing_suite": {
+      "run": 107,
+      "skipped": 1,
+      "failed": 0
+    }
+  },
+  "adversarial_results": "Frozen adversarial cases passed in both runs; added regressions cover scan limits, overlapping selectors, linked paths, directory targets, failed rollback, duplicate cases, forged results, stale evidence and rejected-trial persistence.",
+  "cost_results": "Declared fixture budgets passed; no live-provider expenditure or broad performance improvement claim.",
+  "safety_results": {
+    "frozen_findings": 0,
+    "scope": "Trusted nonconcurrent local workspace; cooperative deadlines, no OS sandbox guarantee"
+  },
+  "decision": "accept",
+  "decision_rationale": "Accept local branch preparation and bounded repairs only. Full repository checks passed and independent review reported no remaining merge blockers. Live compatibility is quarantined.",
+  "reproducibility_notes": "Python 3.12 on Windows. Both 24-case runs have identical case decisions and safety findings. Exact source hashes and commands are in acceptance-final.json.",
+  "rollback_trigger": "Any accepted contract, safety or regression check fails; revert the branch commit and preserve failed-rollback .bak files for recovery.",
+  "artifact_hashes": {
+    "final-ledger-1.jsonl": "5e5db9f8f38b1019ab132c6bb29e54c7171c8b61840ab1ae2366e8ae48d03d29",
+    "final-ledger-2.jsonl": "b09a2c672c176f34336922b46b85bc31fef09b63267ec218f2413c5a51538da3",
+    "acceptance-final.json": "35e85c99d6dbe24612ad44759eca46ecc7c560bee1699abd23a8ae2a56917976"
+  },
+  "operator_notes": {
+    "base_branch": "main (renamed from master)",
+    "remote": "not configured",
+    "github_ci": "configured, not remotely executed",
+    "independent_review": "Proposer/executor and separate reviewer outputs reconciled; final reviewer found no remaining blockers",
+    "unrelated_work": "Council execution, handoffs, goal-control and harness context snapshots preserved and excluded locally"
+  },
+  "evidence_class": "C"
+}

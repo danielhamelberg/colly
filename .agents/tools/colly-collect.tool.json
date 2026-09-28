@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "colly_collect_context",
+  "description": "Create a bounded local Markdown context bundle and canonical provenance inventory from explicitly selected files.",
+  "inputSchema": "../../schemas/colly-agent-request.schema.json",
+  "resultSchema": "../../schemas/colly-agent-result.schema.json",
+  "transport": {
+    "command": ["python", "colly.py", "--agent", "--request-json", "-"],
+    "request": "stdin-json",
+    "result": "stdout-json",
+    "diagnostics": "stderr",
+    "successExitCode": 0
+  }
+}

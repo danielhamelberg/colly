@@ -1,0 +1,4 @@
+# Large vendored and generated artifacts that swamp repository context.
+rsi-attribution-kit-v0.1/
+rsi-attribution-kit-v0.1.zip
+autopilot_dashboard.html

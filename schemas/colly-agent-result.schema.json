@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colly.local/schemas/colly-agent-result.schema.json",
+  "title": "Colly agent completion result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "operation",
+    "status",
+    "exitCode",
+    "requestSha256",
+    "bundlePath",
+    "bundleSha256",
+    "bundleSizeBytes",
+    "inventoryPath",
+    "inventorySha256",
+    "filesSelected",
+    "filesTransformed",
+    "filesExcluded",
+    "errorCode",
+    "message",
+    "failedPath",
+    "warnings"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 1},
+    "operation": {"type": "string", "const": "collect"},
+    "status": {"type": "string", "enum": ["ok", "error"]},
+    "exitCode": {"type": "integer", "minimum": 0},
+    "requestSha256": {"type": "string"},
+    "bundlePath": {"type": "string"},
+    "bundleSha256": {"type": "string"},
+    "bundleSizeBytes": {"type": "integer", "minimum": 0},
+    "inventoryPath": {"type": "string"},
+    "inventorySha256": {"type": "string"},
+    "filesSelected": {"type": "integer", "minimum": 0},
+    "filesTransformed": {"type": "integer", "minimum": 0},
+    "filesExcluded": {"type": "integer", "minimum": 0},
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "none",
+        "invalid_request",
+        "root_not_found",
+        "path_outside_root",
+        "path_collision",
+        "requested_file_missing",
+        "selector_no_match",
+        "binary_input",
+        "decode_failed",
+        "limit_exceeded",
+        "artifact_exists",
+        "artifact_source_conflict",
+        "artifact_write_failed",
+        "internal_error"
+      ]
+    },
+    "message": {"type": "string"},
+    "failedPath": {"type": "string"},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  }
+}

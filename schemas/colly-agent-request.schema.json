@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colly.local/schemas/colly-agent-request.schema.json",
+  "title": "Colly agent request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "root",
+    "files",
+    "output",
+    "inventory",
+    "replace",
+    "dependencyGraph",
+    "braPreset",
+    "autoTruncate",
+    "encoding",
+    "maxFiles",
+    "maxSourceBytes",
+    "maxBundleBytes",
+    "maxScanEntries",
+    "deadlineSeconds"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 1},
+    "root": {"type": "string", "minLength": 1},
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "output": {"type": "string", "minLength": 1},
+    "inventory": {"type": "string", "minLength": 1},
+    "replace": {"type": "boolean"},
+    "dependencyGraph": {"type": "boolean"},
+    "braPreset": {
+      "type": "string",
+      "enum": ["none", "focused", "review", "architecture"]
+    },
+    "autoTruncate": {"type": "boolean"},
+    "encoding": {"type": "string", "minLength": 1},
+    "maxFiles": {"type": "integer", "minimum": 1},
+    "maxSourceBytes": {"type": "integer", "minimum": 1},
+    "maxBundleBytes": {"type": "integer", "minimum": 1},
+    "maxScanEntries": {"type": "integer", "minimum": 1},
+    "deadlineSeconds": {"type": "integer", "minimum": 1}
+  }
+}

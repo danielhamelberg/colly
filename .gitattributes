@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# The evaluation hash covers exact bytes across Windows and Unix checkouts.
+harness/evals/*.jsonl text eol=lf
+harness/evals/*.sha256 text eol=lf

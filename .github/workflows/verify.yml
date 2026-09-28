@@ -1,0 +1,25 @@
+name: Verify Colly
+on:
+  push:
+    branches: [main, 'danielhamelberg/**']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Frozen contract evaluation
+        run: python -m harness.agent_tool_eval --provider offline-contract --ledger artifacts/verification/ledger.jsonl
+      - name: Adjudicate and verify repository
+        run: python -m harness.agent_tool_adjudicate --ledger artifacts/verification/ledger.jsonl --acceptance artifacts/verification/acceptance.json --verify-repository
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-evidence
+          path: artifacts/verification/
