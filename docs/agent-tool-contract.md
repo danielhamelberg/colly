@@ -60,3 +60,13 @@ That evidence validates the executable transport and artifact contract within th
 The adjudicator independently checks case identity, uniqueness, suite hash, status/error codes, call/retry limits, and safety findings. The fixed denominator cannot be lowered with a CLI flag. Evaluator hardening is a separately tracked change; it does not change the frozen cases or establish improvement against the historical CLI.
 
 Path checks assume a trusted workspace without concurrent filesystem mutation; they do not provide OS-level isolation. Deadlines are cooperative. If artifact rollback itself fails, the error is reported and remaining `.bak` recovery files are preserved for operator recovery.
+
+## Artifact acceptance revision 2
+
+The evaluation harness now retains bounded source/artifact bytes and independently
+checks actual contents, artifact hashes, sizes, selection and error preservation.
+The frozen v1 cases are unchanged. Old metadata-only ledgers must be rerun; they
+cannot satisfy the new artifact acceptance checks. See the
+[foreground handoff guide](selfinfer-handoff.md) for the verifier's supported
+content modes, execution assumptions and comparison boundary. Live compatibility
+remains quarantined pending named-runtime lifecycle validation.

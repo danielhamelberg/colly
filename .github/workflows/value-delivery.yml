@@ -6,57 +6,11 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: colly-value-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  handoff:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Produce repair context through Colly and retain source snapshot
-        shell: bash
-        run: |
-          python - <<'PY'
-          import base64, hashlib, io, json, pathlib, subprocess, sys, zipfile
-          root = pathlib.Path.cwd()
-          out = root / 'artifacts' / 'delivery'
-          out.mkdir(parents=True, exist_ok=True)
-          request = dict(schemaVersion=1, root=str(root), files=['harness/agent_tool_eval.py', 'harness/agent_tool_adjudicate.py', 'test_agent_artifact_boundary.py', 'schemas/colly-inventory.schema.json', 'schemas/colly-agent-result.schema.json'], output='artifacts/delivery/repair-context.md', inventory='artifacts/delivery/repair-context.inventory.json', replace=False, dependencyGraph=False, braPreset='none', autoTruncate=False, encoding='utf-8', maxFiles=8, maxSourceBytes=262144, maxBundleBytes=300000, maxScanEntries=1000, deadlineSeconds=30)
-          proc = subprocess.run([sys.executable, 'colly.py', '--agent', '--request-json', '-'], input=(json.dumps(request)+'\n').encode(), capture_output=True, timeout=40)
-          (out/'request.json').write_text(json.dumps(request, indent=2)+'\n', encoding='utf-8')
-          (out/'result.json').write_bytes(proc.stdout)
-          print('COLLY_EXIT', proc.returncode, flush=True)
-          print(proc.stdout.decode('utf-8'), flush=True)
-          if proc.returncode:
-              print(proc.stderr.decode('utf-8'), flush=True)
-              raise SystemExit(proc.returncode)
-          result=json.loads(proc.stdout)
-          for key, expected in [('bundlePath','bundleSha256'),('inventoryPath','inventorySha256')]:
-              assert hashlib.sha256((root/result[key]).read_bytes()).hexdigest()==result[expected]
-          paths = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
-          paths = [p for p in paths if p and not p.startswith('docs/verification/') and not p.startswith('docs/superpowers/')]
-          paths += ['artifacts/delivery/request.json','artifacts/delivery/result.json','artifacts/delivery/repair-context.md','artifacts/delivery/repair-context.inventory.json']
-          memory=io.BytesIO()
-          with zipfile.ZipFile(memory, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-              for path in sorted(paths):
-                  archive.writestr(path, (root/path).read_bytes())
-          raw=memory.getvalue()
-          (out/'source-snapshot.zip').write_bytes(raw)
-          print('SOURCE_SNAPSHOT_SHA256',hashlib.sha256(raw).hexdigest(),flush=True)
-          encoded=base64.b64encode(raw).decode()
-          for index in range(0,len(encoded),6000):
-              print('SOURCE_SNAPSHOT_CHUNK',index//6000,encoded[index:index+6000],flush=True)
-          print('SOURCE_SNAPSHOT_END',len(raw),len(encoded),flush=True)
-          PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: colly-repair-handoff
-          path: artifacts/delivery/
-  tests:
+  verify:
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +23,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Unit and artifact-boundary regressions
+      - name: Unit, artifact-boundary and handoff regressions
         run: python -m unittest discover -v
       - name: Documentation checks
         run: python scripts/check_docs.py
+      - name: Frozen contract and retained artifact evidence
+        run: python -m harness.agent_tool_eval --provider offline-contract --ledger artifacts/value/ledger.jsonl
+      - name: Independent adjudication
+        run: python -m harness.agent_tool_adjudicate --ledger artifacts/value/ledger.jsonl --acceptance artifacts/value/acceptance.json
+      - name: Deterministic handoff smoke (not model-performance evidence)
+        run: python scripts/run_value_smoke.py --output artifacts/value/smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: colly-value-${{ matrix.os }}
+          path: artifacts/value/

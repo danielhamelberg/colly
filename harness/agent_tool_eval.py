@@ -30,6 +30,10 @@ from colly import (
     AGENT_DEFAULT_MAX_SOURCE_BYTES,
     canonical_json_bytes,
 )
+from harness.artifact_verifier import (
+    make_evidence, snapshot_bytes, verify_artifact_bytes, verify_transition, load_json as load_artifact_json,
+    EXPECTED_PATHS, VERSION as ARTIFACT_VERIFIER_VERSION,
+)
 from harness.tool_adapters import (
     build_codex_ptc_tools,
     build_hermes_tool,
@@ -110,6 +114,7 @@ def candidate_artifact_hashes() -> Dict[str, str]:
         "harness/evals/agent-tool-cases-v1.sha256", "harness/agent_tool_eval.py",
         "harness/agent_tool_adjudicate.py", "harness/tool_adapters.py",
         "test_colly.py", "test_colly_agent.py", "test_agent_tool_harness.py", "test_tool_adapters.py",
+        "harness/artifact_verifier.py", "test_agent_artifact_boundary.py", "test_artifact_verifier.py",
     )
     return {relative: case_file_sha256(REPO_ROOT / relative) for relative in paths}
 
@@ -201,8 +206,13 @@ def _run_colly(request_document: Mapping[str, Any], cwd: Path) -> Tuple[Dict[str
     elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
     stdout_text = process.stdout.decode("utf-8", errors="strict")
     try:
-        result = json.loads(stdout_text)
-    except json.JSONDecodeError as exc:
+        result = load_artifact_json(process.stdout)
+        record = canonical_json_bytes(result)
+        # Windows text-mode stdout may translate only the terminal LF to CRLF.
+        # The JSON document itself must still be canonical and exactly one record.
+        if process.stdout not in (record, record[:-1] + b"\r\n"):
+            raise ValueError("noncanonical result record")
+    except ValueError as exc:
         raise RuntimeError(f"Colly emitted invalid JSON: {stdout_text!r}") from exc
     transport = {
         "exitCode": process.returncode,
@@ -233,8 +243,22 @@ def _safety_failures(
     undeclared = created - declared
     if undeclared:
         failures.append(f"undeclared-write:{sorted(undeclared)[0]}")
-    if result.get("status") == "error" and (created & declared):
-        failures.append("partial-artifact-on-error")
+    if result.get("status") == "error":
+        if created & declared:
+            failures.append("partial-artifact-on-error")
+        if any(before.get(path) != after.get(path) for path in declared):
+            failures.append("declared-artifact-changed-on-error")
+    elif result.get("status") == "ok":
+        try:
+            actual = snapshot_bytes(root, max_bytes=64 * 1024 * 1024)
+            # Sources must be captured before executing the collector in run_case.
+            # This compatibility helper only reads unchanged source paths.
+            sources = {path: actual[path] for path in before if path not in declared
+                       and path in actual and before[path] == after.get(path)}
+            failures.extend(verify_artifact_bytes(request, result, sources, actual,
+                            EXPECTED_PATHS.get(case.get("caseId", ""))))
+        except (ValueError, OSError) as exc:
+            failures.append(f"artifact-capture:{type(exc).__name__}")
     if "no-secret-output" in case["safetyAssertions"]:
         for relative in created & declared:
             path = root / relative
@@ -411,11 +435,11 @@ def _ledger_record(
     category = case["category"]
     case_result = {"caseId": case["caseId"], "passed": score["passed"], "failures": score["failures"]}
     return {
-        "iteration_id": "implementation-v1",
+        "iteration_id": "artifact-verification-v2",
         "parent_system_version": _git_version(),
         "candidate_id": "colly-agent-tool-contract-v1",
-        "hypothesis": "A strict bounded artifact contract improves reliable agent tool use.",
-        "exact_modification": "Agent JSON transport, bounded collector, canonical inventory, and provider adapters.",
+        "hypothesis": "Independent source/artifact checks reject invalid successes without changing collector semantics.",
+        "exact_modification": "Independent artifact verification and retained source/artifact evidence; frozen cases unchanged.",
         "intended_mechanism": "Make selection, execution bounds, writes, and provenance explicit and machine-checkable.",
         "benchmarks_run": ["agent-tool-cases-v1"],
         "main_results": case_result if category == "main" else {},
@@ -476,10 +500,16 @@ def run_case(case: Mapping[str, Any], args: argparse.Namespace) -> Dict[str, Any
             )
         if request != canonical_request:
             raise RuntimeError("model arguments differ from the frozen request; execution refused")
-        before = _snapshot_files(root)
+        before_bytes = snapshot_bytes(root)
+        before = {name: hashlib.sha256(data).hexdigest() for name, data in before_bytes.items()}
         result, transport = _run_colly(request, root)
-        after = _snapshot_files(root)
+        after_bytes = snapshot_bytes(root)
+        after = {name: hashlib.sha256(data).hexdigest() for name, data in after_bytes.items()}
         safety_failures = _safety_failures(case, request, root, before, after, result)
+        safety_failures.extend(verify_transition(request, result, before_bytes, after_bytes,
+                              transport["exitCode"], EXPECTED_PATHS.get(case["caseId"])))
+        safety_failures = sorted(set(safety_failures))
+        evidence = make_evidence(request, result, before_bytes, after_bytes, transport["exitCode"])
         trace = {
             "status": result.get("status"),
             "errorCode": result.get("errorCode"),
@@ -507,7 +537,7 @@ def run_case(case: Mapping[str, Any], args: argparse.Namespace) -> Dict[str, Any
             }
         elif args.provider == "muse-openai-compatible":
             provider_metadata = {"toolCallId": provider_state.get("call", {}).get("id", "")}
-        return _ledger_record(
+        record = _ledger_record(
             case,
             args,
             request,
@@ -518,6 +548,10 @@ def run_case(case: Mapping[str, Any], args: argparse.Namespace) -> Dict[str, Any
             score,
             final_message,
         )
+        record["operator_notes"]["verificationEvidence"] = evidence
+        record["artifact_hashes"]["verificationEvidence"] = hashlib.sha256(canonical_json_bytes(evidence)).hexdigest()
+        record["operator_notes"]["artifactVerifier"] = ARTIFACT_VERIFIER_VERSION
+        return record
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -550,6 +584,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     records = []
     with args.ledger.open("wb") as ledger:
         for case in cases:
+            trial_started = time.perf_counter()
             try:
                 record = run_case(case, args)
             except Exception as exc:
@@ -557,9 +592,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = {"status": "error", "errorCode": "harness_error"}
                 trace = {"toolCalls": 0, "retries": 0, "safetyFailures": ["trial-incomplete"]}
                 record = _ledger_record(case, args, {}, {}, result,
-                    {"elapsedMs": 0, "stdoutBytes": 0}, trace,
+                    {"elapsedMs": round((time.perf_counter() - trial_started) * 1000, 3), "stdoutBytes": 0}, trace,
                     {"passed": False, "failures": [type(exc).__name__]}, "")
                 record["operator_notes"]["harnessErrorType"] = type(exc).__name__
+                record["cost_results"]["accountingComplete"] = False
+                record["cost_results"]["providerUsage"] = None
+                record["cost_results"]["toolCallsKnown"] = False
                 # Do not persist provider exception bodies: they can contain credentials or prompt data.
             records.append(record)
             ledger.write(canonical_json_bytes(record))

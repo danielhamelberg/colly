@@ -24,7 +24,7 @@ class ArtifactBoundaryTests(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.source = b"VALUE = 42\n"
         (self.root / "a.py").write_bytes(self.source)
-        self.request = dict(schemaVersion=1, root=str(self.root), files=["a.py"],
+        self.request = dict(schemaVersion=1, root=self.root.as_posix(), files=["a.py"],
             output="audit/bundle.md", inventory="audit/bundle.inventory.json",
             replace=False, dependencyGraph=False, braPreset="none",
             autoTruncate=False, encoding="utf-8", maxFiles=1,
@@ -40,9 +40,9 @@ class ArtifactBoundaryTests(unittest.TestCase):
 
     def artifacts(self, body=None):
         rendered = self.source if body is None else body
-        bundle = b"# a.py\n\n```python\n" + rendered + b"```\n"
+        bundle = b'## File: "a.py"\n```python\n' + rendered + b"```\n"
         digest = sha(canonical(self.request))
-        inv = dict(schemaVersion=1, root=str(self.root), requestSha256=digest,
+        inv = dict(schemaVersion=1, root=self.root.as_posix(), requestSha256=digest,
             bundle=dict(path=self.request["output"], sha256=sha(bundle), sizeBytes=len(bundle)),
             limits={k:self.request[k] for k in ("maxFiles", "maxSourceBytes", "maxBundleBytes", "maxScanEntries", "deadlineSeconds")},
             files=[dict(relativePath="a.py", sourceSizeBytes=len(self.source), sourceSha256=sha(self.source),

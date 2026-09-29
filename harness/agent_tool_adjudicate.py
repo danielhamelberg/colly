@@ -10,10 +10,13 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Sequence, Set
 
-from colly import canonical_json_bytes
+from harness.artifact_verifier import (
+    canonical as canonical_json_bytes, unpack_evidence, verify_transition,
+    expected_fixture_before, EXPECTED_PATHS, sha, load_json,
+)
 from harness.agent_tool_eval import (
     DEFAULT_CASES_PATH, case_file_sha256, load_cases, score_trace,
-    validate_case_set, validate_frozen_case_file, candidate_artifact_hashes,
+    validate_case_set, validate_frozen_case_file, candidate_artifact_hashes, build_request_document,
 )
 
 
@@ -118,6 +121,26 @@ def adjudicate_records(
             "retries": cost["retries"], "safetyFailures": safety["failures"]})
         if not score["passed"] or record.get("evidence_class") != "C":
             return reject(f"case evidence failed independent scoring: {case_id}")
+        # Replay retained bytes against the frozen fixture, not self-reported safety.
+        try:
+            evidence = notes.get("verificationEvidence")
+            if hashes.get("verificationEvidence") != sha(canonical_json_bytes(evidence)):
+                return reject(f"artifact evidence digest mismatch: {case_id}")
+            before, after = unpack_evidence(evidence)
+            request = evidence["request"]
+            if type(request) is not dict or request != notes.get("toolArguments"):
+                return reject(f"artifact request binding mismatch: {case_id}")
+            expected_request = build_request_document(case, request.get("root", ""))
+            if request != expected_request or evidence["result"] != result:
+                return reject(f"frozen request/result mismatch: {case_id}")
+            if before != expected_fixture_before(case):
+                return reject(f"fixture source mismatch: {case_id}")
+            findings = verify_transition(request, result, before, after,
+                                        evidence["exitCode"], EXPECTED_PATHS.get(case_id))
+            if findings:
+                return reject(f"independent artifact validation failed: {case_id}: {findings[0]}")
+        except (ValueError, KeyError, TypeError, OSError, UnicodeError):
+            return reject(f"missing or malformed artifact evidence: {case_id}")
     if len(configurations) != 1:
         return reject("mixed provider/model configurations")
     safety_failures = sum(
@@ -164,7 +187,11 @@ def adjudicate_records(
 
 
 def load_ledger(path: Path) -> list[Dict[str, Any]]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    with path.open("rb") as stream:
+        raw = stream.read(80 * 1024 * 1024 + 1)
+    if len(raw) > 80 * 1024 * 1024:
+        raise ValueError("ledger byte limit exceeded")
+    return [load_json(line) for line in raw.splitlines() if line.strip()]
 
 
 def _sha256_path(path: Path) -> str:
@@ -186,6 +213,7 @@ def verify_repository() -> list[Dict[str, Any]]:
             "harness/tool_adapters.py",
             "harness/agent_tool_eval.py",
             "harness/agent_tool_adjudicate.py",
+            "harness/artifact_verifier.py",
         ],
         ["git", "diff", "--check"],
         ["git", "diff", "--cached", "--check"],
