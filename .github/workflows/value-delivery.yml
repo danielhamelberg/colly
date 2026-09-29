@@ -10,12 +10,30 @@ concurrency:
   group: colly-value-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preserve exact committed source
+        run: |
+          mkdir -p artifacts/source
+          git archive --format=zip HEAD -o artifacts/source/colly-source.zip
+          git rev-parse HEAD > artifacts/source/commit.txt
+          sha256sum artifacts/source/colly-source.zip > artifacts/source/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colly-source
+          path: artifacts/source/
   verify:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,7 +42,15 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit, artifact-boundary and handoff regressions
-        run: python -m unittest discover -v
+        shell: python
+        run: |
+          import pathlib, subprocess, sys
+          out = pathlib.Path('artifacts/value')
+          out.mkdir(parents=True, exist_ok=True)
+          result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-v'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+          (out / 'unittest.log').write_bytes(result.stdout)
+          print(result.stdout.decode('utf-8', errors='replace'))
+          raise SystemExit(result.returncode)
       - name: Documentation checks
         run: python scripts/check_docs.py
       - name: Frozen contract and retained artifact evidence
