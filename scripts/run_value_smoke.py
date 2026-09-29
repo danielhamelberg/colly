@@ -43,9 +43,12 @@ def main(argv=None):
             tasks.append({'taskId':name,'instruction':'Repair the specified fixture and preserve the public interface.',
                           'files':['facade.py' if name=='dependency' else name+'.py'],
                           'allowedEdits':[name+'.py'],'testCommand':['{python}',test]})
-            baseline=subprocess.run([sys.executable,test],cwd=repo,capture_output=True)
+            # Baseline failures must not seed timestamp-valid .pyc files into the trial.
+            baseline=subprocess.run([sys.executable,'-B',test],cwd=repo,capture_output=True)
             if baseline.returncode==0:raise RuntimeError('fixture must fail before repair')
-        subprocess.run(['git','init','-q'],cwd=repo,check=True);subprocess.run(['git','add','.'],cwd=repo,check=True)
+        subprocess.run(['git','init','-q'],cwd=repo,check=True)
+        tracked=sorted(source)+['verify_'+name+'.py' for name in tests]
+        subprocess.run(['git','add','--',*tracked],cwd=repo,check=True)
         report=run_comparison(repo,tasks,args.output,[sys.executable,str(worker)],
                               'deterministic-fixture-worker-v1','synthetic-handoff-smoke')
         if report['summaries']['direct']['tasksPassed']!=2 or report['summaries']['colly-none']['tasksPassed']!=2 or report['summaries']['colly-focused']['tasksPassed']!=3:
