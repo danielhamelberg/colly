@@ -9,6 +9,7 @@
     "docs/ai-native-dependency-graph-annotations.md",
     "docs/reference/agent-request.md",
     ".agents/tools/colly-tool.md",
-    ".agents/skills/use-colly/SKILL.md"
+    ".agents/skills/use-colly/SKILL.md",
+    "docs/selfinfer-handoff.md"
   ]
 }

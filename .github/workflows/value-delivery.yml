@@ -1,0 +1,66 @@
+name: Colly value delivery
+on:
+  push:
+    branches: ['danielhamelberg/colly-brik-value-20260929']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: colly-value-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preserve exact committed source
+        run: |
+          mkdir -p artifacts/source
+          git archive --format=zip HEAD -o artifacts/source/colly-source.zip
+          git rev-parse HEAD > artifacts/source/commit.txt
+          sha256sum artifacts/source/colly-source.zip > artifacts/source/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colly-source
+          path: artifacts/source/
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit, artifact-boundary and handoff regressions
+        shell: python
+        run: |
+          import pathlib, subprocess, sys
+          out = pathlib.Path('artifacts/value')
+          out.mkdir(parents=True, exist_ok=True)
+          result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-v'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+          (out / 'unittest.log').write_bytes(result.stdout)
+          print(result.stdout.decode('utf-8', errors='replace'))
+          raise SystemExit(result.returncode)
+      - name: Documentation checks
+        run: python scripts/check_docs.py
+      - name: Frozen contract and retained artifact evidence
+        run: python -m harness.agent_tool_eval --provider offline-contract --ledger artifacts/value/ledger.jsonl
+      - name: Independent adjudication
+        run: python -m harness.agent_tool_adjudicate --ledger artifacts/value/ledger.jsonl --acceptance artifacts/value/acceptance.json
+      - name: Deterministic handoff smoke (not model-performance evidence)
+        run: python scripts/run_value_smoke.py --output artifacts/value/smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: colly-value-${{ matrix.os }}
+          path: artifacts/value/

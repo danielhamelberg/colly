@@ -29,23 +29,15 @@ CASES_PATH = REPO_ROOT / "harness" / "evals" / "agent-tool-cases-v1.jsonl"
 HASH_PATH = REPO_ROOT / "harness" / "evals" / "agent-tool-cases-v1.sha256"
 
 
+_VALID_RECORDS_CACHE = None
+
+
 def valid_records():
-    records = []
-    for case in load_cases(CASES_PATH):
-        record = {field: {} for field in LEDGER_REQUIRED_FIELDS}
-        record.update(
-            decision="accept", evidence_class="C",
-            safety_results={"failures": []},
-            cost_results={"toolCalls": 1, "retries": 0},
-            artifact_hashes={"candidate": candidate_artifact_hashes()},
-            operator_notes={
-                "provider": "offline-contract", "model": "", "caseId": case["caseId"],
-                "category": case["category"], "caseSetSha256": case_file_sha256(CASES_PATH),
-                "result": {"status": case["expectedStatus"], "errorCode": case["expectedErrorCode"]},
-            },
-        )
-        records.append(record)
-    return records
+    global _VALID_RECORDS_CACHE
+    if _VALID_RECORDS_CACHE is None:
+        args = build_parser().parse_args(["--ledger", "unused"])
+        _VALID_RECORDS_CACHE = [run_case(case, args) for case in load_cases(CASES_PATH)]
+    return copy.deepcopy(_VALID_RECORDS_CACHE)
 
 
 class AgentToolHarnessTests(unittest.TestCase):

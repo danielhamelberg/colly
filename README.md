@@ -31,3 +31,10 @@ python -m harness.agent_tool_adjudicate --ledger artifacts/verification/ledger.j
 The 24-case suite is pinned by exact SHA-256 bytes; changing its contents requires a separately reviewed evaluator version. The adjudicator validates unique case identities, suite hashes, result status, call/retry limits, and safety findings. Evidence remains Class C (local synthetic fixtures). Passing these checks does not establish a comparative capability gain or live model compatibility. Live adapters are experimental, and their compatibility decisions remain quarantined pending independent content and lifecycle validation.
 
 Filesystem safety assumes a trusted, nonconcurrent local workspace. Cooperative deadlines and path checks do not provide an operating-system sandbox against another process changing files during execution. Windows may skip real symlink tests when the account lacks symlink privileges; mocked boundary tests still run.
+
+## Foreground task handoff
+
+Use the [SelfInfer handoff](docs/selfinfer-handoff.md) to send verified source
+content to an existing solver, validate bounded patches and test them in a
+disposable checkout. The comparison runner retains failures and costs; its
+included deterministic smoke fixtures do not establish model-performance gains.
