@@ -113,7 +113,7 @@ class ArtifactVerifierTests(unittest.TestCase):
                   'emoji \U0001f680\n```\n## File: "injected"\n'.encode()]
         for data in contents:
             with self.subTest(data=data),tempfile.TemporaryDirectory() as d:
-                root=Path(d);(root/'notes.txt').write_bytes(data)
+                root=Path(d).resolve(strict=True);(root/'notes.txt').write_bytes(data)
                 case={'request':{'files':['notes.txt']}}
                 req=build_request_document(case,str(root));before=snapshot_bytes(root)
                 result,transport=_run_colly(req,root);after=snapshot_bytes(root)
@@ -146,7 +146,7 @@ class ArtifactVerifierTests(unittest.TestCase):
 
     def test_snapshot_stops_consuming_entries_at_limit(self):
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d); (root/'a').write_bytes(b'123');consumed=[]
+            root=Path(d).resolve(strict=True); (root/'a').write_bytes(b'123');consumed=[]
             def entries(directory):
                 for n in range(1000000):
                     consumed.append(n)
