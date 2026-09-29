@@ -134,6 +134,7 @@ def snapshot_repository(source: Path, destination: Path, limits: Mapping[str, in
 
 
 def _safe_source(root: Path, name: str, max_bytes: int) -> bytes:
+    root = root.resolve(strict=True)
     relative_path(name)
     path = root/name
     check = path
@@ -245,6 +246,7 @@ def prepare_handoff(source: Path, run: Path, task: Mapping[str, Any], mode: str,
 
 
 def validate_proposal(proposal: Any, packet: Mapping[str, Any], contract: Mapping[str, Any], root: Path) -> dict[str, bytes]:
+    root = root.resolve(strict=True)
     required={'schemaVersion','taskId','contextSha256','edits','usage'}
     if type(proposal)is not dict or set(proposal)!=required:raise ValueError('proposal-shape')
     if type(proposal['schemaVersion'])is not int or proposal['schemaVersion']!=1 or proposal['taskId']!=packet['taskId'] or proposal['contextSha256']!=packet['contextSha256']:
