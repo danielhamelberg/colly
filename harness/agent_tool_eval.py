@@ -168,7 +168,10 @@ def _write_fixture_file(base: Path, relative: str, content: bytes) -> None:
 
 
 def materialize_fixture(case: Mapping[str, Any], base: Path) -> Path:
-    root = base / "repo"
+    # Resolve host aliases (including Windows 8.3 temporary paths) before
+    # constructing the request whose bytes will be bound to the artifacts.
+    # Evidence replay remains filesystem-independent.
+    root = base.resolve(strict=True) / "repo"
     root.mkdir(parents=True)
     fixture = case["fixture"]
     for relative, text in fixture.get("textFiles", {}).items():
